@@ -1,91 +1,91 @@
-# name: Build and Deploy to Azure
+name: Build and Deploy to Azure
 
-# on:
-#   push:
-#     branches: [ main, master ]
-#   workflow_dispatch:
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
 
-# env:
-#   AZURE_RESOURCE_GROUP: cyber-analyzer-rg
-#   PROJECT_NAME: cyber-analyzer
-#   CONTAINER_NAME: main
+env:
+  AZURE_RESOURCE_GROUP: cyber-analyzer-rg
+  PROJECT_NAME: cyber-analyzer
+  CONTAINER_NAME: main
 
-# jobs:
-#   build-and-push:
-#     name: Build and Push Docker Image
-#     runs-on: ubuntu-latest
-#     outputs:
-#       image_full: ${{ steps.image-info.outputs.IMAGE_FULL }}
-#     permissions:
-#       contents: read
-#       id-token: write
+jobs:
+  build-and-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    outputs:
+      image_full: ${{ steps.image-info.outputs.IMAGE_FULL }}
+    permissions:
+      contents: read
+      id-token: write
 
-#     steps:
-#       - name: Checkout code
-#         uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-#       - name: Set up Docker Buildx
-#         uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-#       - name: Login to Azure
-#         uses: azure/login@v2
-#         with:
-#           client-id: ${{ secrets.AZURE_CLIENT_ID }}
-#           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-#           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-#       # ⭐ The correct way — use Terraform output
-#       - name: Get ACR name from Terraform output
-#         id: get-acr
-#         working-directory: terraform/azure
-#         run: |
-#           terraform init -backend=false
-#           ACR_NAME=$(terraform output -raw acr_name)
-#           echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
+      # ⭐ The correct way — use Terraform output
+      - name: Get ACR name from Terraform output
+        id: get-acr
+        working-directory: terraform/azure
+        run: |
+          terraform init -backend=false
+          ACR_NAME=$(terraform output -raw acr_name)
+          echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
 
-#       - name: Login to Azure Container Registry
-#         run: |
-#           az acr login --name ${{ env.ACR_NAME }}
+      - name: Login to Azure Container Registry
+        run: |
+          az acr login --name ${{ env.ACR_NAME }}
 
-#       # ⭐ Build and push image
-#         # Expose IMAGE_FULL as a job-level output
-#       - name: Build and push Docker image
-#         id: image-info
-#         uses: docker/build-push-action@v5
-#         with:
-#           context: .
-#           file: ./Dockerfile
-#           push: true
-#           tags: |
-#             ${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:${{ github.sha }}
-#             ${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:latest
-#           platforms: linux/amd64
+      # ⭐ Build and push image
+        # Expose IMAGE_FULL as a job-level output
+      - name: Build and push Docker image
+        id: image-info
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:${{ github.sha }}
+            ${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:latest
+          platforms: linux/amd64
 
-#         # Expose full image name
-#       - name: Set image output
-#         run: |
-#           echo "IMAGE_FULL=${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+        # Expose full image name
+      - name: Set image output
+        run: |
+          echo "IMAGE_FULL=${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
 
-#   deploy:
-#     name: Deploy to Azure Container Apps
-#     runs-on: ubuntu-latest
-#     needs: build-and-push
-#     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-#     permissions:
-#       id-token: write
+  deploy:
+    name: Deploy to Azure Container Apps
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    permissions:
+      id-token: write
 
-#     steps:
-#       - name: Login to Azure
-#         uses: azure/login@v2
-#         with:
-#           client-id: ${{ secrets.AZURE_CLIENT_ID }}
-#           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-#           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-#       - name: Deploy new revision
-#         run: |
-#           az containerapp update \
-#             --name ${{ env.PROJECT_NAME }} \
-#             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-#             --image "${{ needs.build-and-push.outputs.image_full }}" \
-#             --container-name "${{ env.CONTAINER_NAME }}"
+      - name: Deploy new revision
+        run: |
+          az containerapp update \
+            --name ${{ env.PROJECT_NAME }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image "${{ needs.build-and-push.outputs.image_full }}" \
+            --container-name "${{ env.CONTAINER_NAME }}"

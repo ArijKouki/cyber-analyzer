@@ -66,8 +66,6 @@ jobs:
           echo "::add-mask::$IMAGE"
           echo "IMAGE=$IMAGE" >> $GITHUB_ENV
 
-      - name: Debug decoded image
-        run: echo "Decoded image: $IMAGE"
 
       - name: Login to Azure
         run: |

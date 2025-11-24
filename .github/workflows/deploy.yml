@@ -46,10 +46,11 @@ jobs:
             ${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:latest
           platforms: linux/amd64
 
-      - name: Set image output
+      - name: Set image output (safe prefix)
         id: image-info
         run: |
-          echo "image_full=${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+          IMAGE="SAFE::${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:${{ github.sha }}"
+          echo "image_full=$IMAGE" >> $GITHUB_OUTPUT
 
 
   deploy:
@@ -66,7 +67,7 @@ jobs:
       
       - name: Debug image output
         run: |
-          echo "image_full from needs: '${{ needs.build-and-push.outputs.image_full }}'"
+          echo "Raw image_full: '${{ needs.build-and-push.outputs.image_full }}'"
 
       - name: Login to Azure
         run: |
@@ -75,8 +76,11 @@ jobs:
 
       - name: Deploy new revision
         run: |
+          RAW="${{ needs.build-and-push.outputs.image_full }}"
+          IMAGE="${RAW#SAFE::}"
+          echo "Deploying image: $IMAGE"
           az containerapp update \
             --name ${{ env.PROJECT_NAME }} \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image "${{ needs.build-and-push.outputs.image_full }}" \
+            --image "$IMAGE" \
             --container-name "${{ env.CONTAINER_NAME }}"

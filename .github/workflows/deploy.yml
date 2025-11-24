@@ -52,24 +52,30 @@ jobs:
           echo "IMAGE_FULL=${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
 
   deploy:
-    name: Deploy to Azure Container Apps
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    if: |
-      needs.build-and-push.result == 'success' &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+  name: Deploy to Azure Container Apps
+  runs-on: ubuntu-latest
+  needs: build-and-push
 
+  steps:
+    - name: Check branch
+      if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master'
+      run: |
+        echo "Not on main or master — skipping deploy."
+        exit 0
+    
+    - name: Debug image output
+      run: |
+        echo "IMAGE_FULL from needs: '${{ needs.build-and-push.outputs.image_full }}'"
 
-    steps:
-      - name: Login to Azure
-        run: |
-          az login --username ${{ secrets.AZURE_USERNAME }} --password ${{ secrets.AZURE_PASSWORD }}
-          az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    - name: Login to Azure
+      run: |
+        az login --username ${{ secrets.AZURE_USERNAME }} --password ${{ secrets.AZURE_PASSWORD }}
+        az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy new revision
-        run: |
-          az containerapp update \
-            --name ${{ env.PROJECT_NAME }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image "${{ needs.build-and-push.outputs.image_full }}" \
-            --container-name "${{ env.CONTAINER_NAME }}"
+    - name: Deploy new revision
+      run: |
+        az containerapp update \
+          --name ${{ env.PROJECT_NAME }} \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --image "${{ needs.build-and-push.outputs.image_full }}" \
+          --container-name "${{ env.CONTAINER_NAME }}"

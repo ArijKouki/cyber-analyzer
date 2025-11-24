@@ -13,61 +13,57 @@ env:
 
 jobs:
   build-and-push:
-    name: Build and Push Docker Image
     runs-on: ubuntu-latest
     outputs:
-      image_full: ${{ steps.image-info.outputs.image_full }}
-    permissions:
-      contents: read
+      encoded_image: ${{ steps.encode.outputs.ENCODED_IMAGE }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Login to Azure Container Registry
-        uses: docker/login-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ${{ env.ACR_NAME }}.azurecr.io
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Build and push Docker image
-        id: docker-build
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: |
-            ${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:${{ github.sha }}
-            ${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:latest
-          platforms: linux/amd64
-
-      - name: Set image output (safe prefix)
-        id: image-info
         run: |
-          IMAGE="SAFE::${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:${{ github.sha }}"
-          echo "image_full=$IMAGE" >> $GITHUB_OUTPUT
+          docker buildx build \
+            --push \
+            --platform linux/amd64 \
+            -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:${{ github.sha }} \
+            -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:latest \
+            .
+
+      - name: Encode image twice for safe output
+        id: encode
+        run: |
+          IMAGE="${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:${{ github.sha }}"
+          ENCODED=$(printf '%s' "$IMAGE" | base64 -w0 | base64 -w0)
+          echo "ENCODED_IMAGE=$ENCODED" >> $GITHUB_OUTPUT
 
 
   deploy:
-    name: Deploy to Azure Container Apps
     runs-on: ubuntu-latest
     needs: build-and-push
 
     steps:
       - name: Check branch
         if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master'
+        run: exit 0
+
+      - name: Decode image (double base64)
+        id: decode
         run: |
-          echo "Not on main or master — skipping deploy."
-          exit 0
-      
-      - name: Debug image output
-        run: |
-          echo "Raw image_full: '${{ needs.build-and-push.outputs.image_full }}'"
+          RAW="${{ needs.build-and-push.outputs.encoded_image }}"
+          IMAGE=$(printf '%s' "$RAW" | base64 -di | base64 -di)
+          echo "::add-mask::$IMAGE"
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      - name: Debug decoded image
+        run: echo "Decoded image: $IMAGE"
 
       - name: Login to Azure
         run: |
@@ -76,9 +72,6 @@ jobs:
 
       - name: Deploy new revision
         run: |
-          RAW="${{ needs.build-and-push.outputs.image_full }}"
-          IMAGE="${RAW#SAFE::}"
-          echo "Deploying image: $IMAGE"
           az containerapp update \
             --name ${{ env.PROJECT_NAME }} \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \

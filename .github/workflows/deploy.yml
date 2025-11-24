@@ -16,7 +16,7 @@ jobs:
     name: Build and Push Docker Image
     runs-on: ubuntu-latest
     outputs:
-      image_full: ${{ steps.image-info.outputs.IMAGE_FULL }}
+      image_full: ${{ steps.image-info.outputs.image_full }}
     permissions:
       contents: read
 
@@ -49,7 +49,8 @@ jobs:
       - name: Set image output
         id: image-info
         run: |
-          echo "IMAGE_FULL=${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "image_full=${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+
 
   deploy:
     name: Deploy to Azure Container Apps
@@ -65,7 +66,7 @@ jobs:
       
       - name: Debug image output
         run: |
-          echo "IMAGE_FULL from needs: '${{ needs.build-and-push.outputs.image_full }}'"
+          echo "image_full from needs: '${{ needs.build-and-push.outputs.image_full }}'"
 
       - name: Login to Azure
         run: |

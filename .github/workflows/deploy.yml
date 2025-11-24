@@ -12,10 +12,11 @@ env:
   ACR_NAME: cyberanalyzerzaiuv4
 
 jobs:
+
   build-and-push:
     runs-on: ubuntu-latest
     outputs:
-      encoded_image: ${{ steps.encode.outputs.ENCODED_IMAGE }}
+      encoded_image: ${{ steps.encode.outputs.encoded_image }}
 
     steps:
       - uses: actions/checkout@v4
@@ -41,8 +42,8 @@ jobs:
         id: encode
         run: |
           IMAGE="${{ env.ACR_NAME }}.azurecr.io/${{ env.PROJECT_NAME }}:${{ github.sha }}"
-          ENCODED=$(printf '%s' "$IMAGE" | base64 -w0 | base64 -w0)
-          echo "ENCODED_IMAGE=$ENCODED" >> $GITHUB_OUTPUT
+          DOUBLE_ENCODED=$(printf '%s' "$IMAGE" | base64 -w0 | base64 -w0)
+          echo "encoded_image=$DOUBLE_ENCODED" >> $GITHUB_OUTPUT
 
 
   deploy:
@@ -50,9 +51,12 @@ jobs:
     needs: build-and-push
 
     steps:
-      - name: Check branch
+
+      - name: Skip if not main/master
         if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master'
-        run: exit 0
+        run: |
+          echo "Not on main or master — skipping deploy."
+          exit 0
 
       - name: Decode image (double base64)
         id: decode
@@ -63,7 +67,7 @@ jobs:
           echo "IMAGE=$IMAGE" >> $GITHUB_ENV
 
       - name: Debug decoded image
-          run: echo "Decoded image: $IMAGE"
+        run: echo "Decoded image: $IMAGE"
 
       - name: Login to Azure
         run: |
